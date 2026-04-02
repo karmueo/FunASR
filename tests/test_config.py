@@ -8,7 +8,8 @@ from funasr_server.config import Settings
 def test_default_settings():
     """测试默认配置值。"""
     s = Settings()
-    assert s.device == "cuda"
+    assert s.device == "cuda:0"
+    assert s.device_translation == "cuda:1"
     assert "SenseVoiceSmall" in s.asr_model
     assert s.vad_model == "fsmn-vad"
     assert s.punc_model == "ct-punc"

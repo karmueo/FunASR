@@ -91,7 +91,7 @@ class TranscriptionPipeline:
                 from funasr_server.translator import Translator
                 self.translator = Translator(
                     model_name=settings.translation_model,
-                    device=settings.device,
+                    device=settings.device_translation,
                     max_length=settings.translation_max_length,
                 )
             except Exception as e:

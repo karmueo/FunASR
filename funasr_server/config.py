@@ -25,7 +25,8 @@ class Settings:
     vad_model: str = "fsmn-vad"
     punc_model: str = "ct-punc"
     spk_model: str = "cam++"
-    device: str = "cuda"
+    device: str = "cuda:0"       # ASR 流水线设备（VAD+ASR+Punc+Spk）
+    device_translation: str = "cuda:1"  # 翻译模型设备
     hub: str = "ms"
 
     # VAD 参数
