@@ -40,7 +40,7 @@ class Settings:
 
     # 翻译配置
     enable_translation: bool = True
-    translation_model: str = "tencent/Hunyuan-MT-7B-fp8"
+    translation_model: str = "/home/tl/models/hunyuan-mt-7b"
     translation_max_length: int = 512
 
     # 服务配置
