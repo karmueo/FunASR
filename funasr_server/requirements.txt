@@ -1,0 +1,7 @@
+funasr
+fastapi
+uvicorn[standard]
+gradio>=4.0.0
+python-multipart
+pytest
+httpx
