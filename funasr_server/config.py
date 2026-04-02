@@ -38,6 +38,11 @@ class Settings:
     # 说话人聚类参数
     merge_thr: float = 0.5
 
+    # 翻译配置
+    enable_translation: bool = True
+    translation_model: str = "facebook/nllb-200-distilled-600M"
+    translation_max_length: int = 512
+
     # 服务配置
     host: str = "0.0.0.0"
     port: int = 8000
@@ -66,6 +71,8 @@ class Settings:
                 setattr(self, f_name, int(env_val))
             elif f_type is float:
                 setattr(self, f_name, float(env_val))
+            elif f_type is bool:
+                setattr(self, f_name, env_val.lower() in ("1", "true", "yes"))
             elif f_type is str:
                 setattr(self, f_name, env_val)
 

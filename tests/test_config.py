@@ -9,7 +9,7 @@ def test_default_settings():
     """测试默认配置值。"""
     s = Settings()
     assert s.device == "cuda"
-    assert "seaco_paraformer" in s.asr_model
+    assert "SenseVoiceSmall" in s.asr_model
     assert s.vad_model == "fsmn-vad"
     assert s.punc_model == "ct-punc"
     assert s.spk_model == "cam++"
@@ -19,6 +19,9 @@ def test_default_settings():
     assert s.host == "0.0.0.0"
     assert s.port == 8000
     assert s.max_audio_duration_s == 7200
+    assert s.enable_translation is True
+    assert "nllb-200" in s.translation_model
+    assert s.translation_max_length == 512
 
 
 def test_env_override(monkeypatch):
@@ -39,3 +42,14 @@ def test_supported_extensions():
     assert ".mp3" in s.supported_extensions
     assert ".flac" in s.supported_extensions
     assert ".txt" not in s.supported_extensions
+
+
+def test_translation_env_override(monkeypatch):
+    """测试翻译配置的环境变量覆盖。"""
+    monkeypatch.setenv("FUNASR_ENABLE_TRANSLATION", "false")
+    monkeypatch.setenv("FUNASR_TRANSLATION_MODEL", "custom/model")
+    monkeypatch.setenv("FUNASR_TRANSLATION_MAX_LENGTH", "256")
+    s = Settings()
+    assert s.enable_translation is False
+    assert s.translation_model == "custom/model"
+    assert s.translation_max_length == 256
