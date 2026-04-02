@@ -124,6 +124,7 @@ class TranscriptionPipeline:
             "merge_length_s": 15,
             "return_spk_res": True,
             "sentence_timestamp": True,
+            "output_timestamp": True,  # 说话人分离依赖时间戳
         }
 
         # 指定说话人数量时启用预设模式
