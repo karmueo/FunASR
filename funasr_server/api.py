@@ -51,7 +51,7 @@ def create_app(settings: Optional[Settings] = None) -> FastAPI:
 
     app = FastAPI(
         title="FunASR 转写服务",
-        description="多语言会议转写 API，支持中英文自动检测、VAD、说话人分离",
+        description="多语言会议转写 API，支持中英日韩粤自动检测、VAD、说话人分离、自动翻译为中文",
         version="0.1.0",
     )
 

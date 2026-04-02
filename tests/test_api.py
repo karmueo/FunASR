@@ -26,7 +26,14 @@ def mock_pipeline():
         "language": "en",
         "duration_s": 10.0,
         "segments": [
-            {"speaker": "spk0", "start_ms": 0, "end_ms": 2000, "text": "Hello world."},
+            {
+                "speaker": "spk0",
+                "start_ms": 0,
+                "end_ms": 2000,
+                "text": "Hello world.",
+                "text_zh": "你好，世界。",
+                "language": "en",
+            },
         ],
         "speakers": ["spk0"],
     }
@@ -75,6 +82,8 @@ def test_transcribe_success(client, mock_pipeline, tmp_path):
     assert data["language"] == "en"
     assert len(data["segments"]) == 1
     assert data["segments"][0]["speaker"] == "spk0"
+    assert data["segments"][0]["text_zh"] == "你好，世界。"
+    assert data["segments"][0]["language"] == "en"
 
     # 验证 pipeline 方法被正确调用
     mock_pipeline.transcribe.assert_called_once()
