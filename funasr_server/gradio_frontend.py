@@ -40,7 +40,7 @@ def create_gradio_app(pipeline: TranscriptionPipeline) -> gr.Blocks:
             task_id = str(uuid.uuid4())
 
             # 语言映射：UI 选项 -> 内部语言代码
-            lang_map = {"自动检测": "auto", "中文": "zh", "英文": "en"}
+            lang_map = {"自动检测": "auto", "中文": "zh", "英文": "en", "日文": "ja", "韩文": "ko", "粤语": "yue"}
             lang = lang_map.get(language, "auto")
 
             # 说话人数量：0 表示自动检测，传 None 给 pipeline
@@ -64,12 +64,16 @@ def create_gradio_app(pipeline: TranscriptionPipeline) -> gr.Blocks:
                 start_sec = seg["start_ms"] / 1000
                 end_sec = seg["end_ms"] / 1000
                 time_str = f"{start_sec:.1f}s - {end_sec:.1f}s"
-                table_data.append([seg["speaker"], time_str, seg["text"]])
+                translation = seg.get("text_zh") or "—"
+                lang = seg.get("language", "")
+                table_data.append([seg["speaker"], time_str, seg["text"], translation, lang])
 
             json_str = json.dumps(result, ensure_ascii=False, indent=2)
+            translated_count = sum(1 for s in result["segments"] if s.get("text_zh"))
             status = (
                 f"转写完成 | 语言: {result['language']} | "
-                f"时长: {duration_s:.1f}s | 说话人: {len(result['speakers'])} 人"
+                f"时长: {duration_s:.1f}s | 说话人: {len(result['speakers'])} 人 | "
+                f"翻译: {translated_count} 段"
             )
 
             return table_data, json_str, status
@@ -79,7 +83,7 @@ def create_gradio_app(pipeline: TranscriptionPipeline) -> gr.Blocks:
 
     with gr.Blocks(title="FunASR 会议转写", theme=gr.themes.Soft()) as demo:
         gr.Markdown("# FunASR 会议转写服务")
-        gr.Markdown("上传音频文件，自动进行语音识别、说话人分离，支持中文和英文。")
+        gr.Markdown("上传音频文件，自动进行语音识别、说话人分离，支持中英日韩粤多语言并自动翻译为中文。")
 
         with gr.Row():
             with gr.Column(scale=1):
@@ -91,7 +95,7 @@ def create_gradio_app(pipeline: TranscriptionPipeline) -> gr.Blocks:
                 )
                 # 语言选择
                 language_radio = gr.Radio(
-                    choices=["自动检测", "中文", "英文"],
+                    choices=["自动检测", "中文", "英文", "日文", "韩文", "粤语"],
                     value="自动检测",
                     label="语言",
                 )
@@ -111,7 +115,7 @@ def create_gradio_app(pipeline: TranscriptionPipeline) -> gr.Blocks:
             with gr.Column(scale=2):
                 # 转写结果表格
                 results_table = gr.Dataframe(
-                    headers=["说话人", "时间", "文本"],
+                    headers=["说话人", "时间", "原文", "中文翻译", "语言"],
                     label="转写结果",
                     interactive=False,
                 )
