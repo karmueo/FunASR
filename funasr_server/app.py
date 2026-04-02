@@ -1,10 +1,12 @@
 """服务启动入口。
 
 启动 FastAPI + Gradio 服务，模型在启动时预加载。
+Gradio 在独立端口运行，避免 Gradio 6.x 子路径挂载的 FileData 兼容性问题。
 """
 
 import logging
 import os
+import threading
 
 import uvicorn
 
@@ -36,13 +38,24 @@ def main():
     import funasr_server.api as api_module
     api_module._pipeline = pipeline
 
-    # 创建 Gradio 前端并挂载
-    gradio_app = create_gradio_app(pipeline)
-    app.mount("/gradio", gradio_app)
+    # Gradio 在独立端口运行，避免 Gradio 6.x 子路径挂载的兼容性问题
+    gradio_port = settings.port + 1
+    gradio_blocks = create_gradio_app(pipeline)
 
-    logger.info("服务启动: http://%s:%d", settings.host, settings.port)
+    def run_gradio():
+        """在独立线程中启动 Gradio 服务。"""
+        gradio_blocks.launch(
+            server_name=settings.host,
+            server_port=gradio_port,
+            show_error=True,
+        )
+
+    gradio_thread = threading.Thread(target=run_gradio, daemon=True)
+    gradio_thread.start()
+
+    logger.info("FastAPI 服务: http://%s:%d", settings.host, settings.port)
     logger.info("API 文档: http://%s:%d/docs", settings.host, settings.port)
-    logger.info("Gradio 界面: http://%s:%d/gradio", settings.host, settings.port)
+    logger.info("Gradio 界面: http://%s:%d", settings.host, gradio_port)
 
     uvicorn.run(
         app,
