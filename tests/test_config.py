@@ -9,7 +9,7 @@ def test_default_settings():
     """测试默认配置值。"""
     s = Settings()
     assert s.device == "cuda"
-    assert s.asr_model == "iic/SenseVoiceSmall"
+    assert "seaco_paraformer" in s.asr_model
     assert s.vad_model == "fsmn-vad"
     assert s.punc_model == "ct-punc"
     assert s.spk_model == "cam++"

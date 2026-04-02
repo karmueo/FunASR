@@ -97,12 +97,13 @@ def test_pipeline_init_calls_auto_model():
         pipeline = TranscriptionPipeline(settings)
 
         mock_auto_model_class.assert_called_once_with(
-            model="iic/SenseVoiceSmall",
-            vad_model="fsmn-vad",
-            vad_kwargs={"max_single_segment_time": 60000},
-            punc_model="ct-punc",
-            spk_model="cam++",
-            spk_kwargs={"cb_kwargs": {"merge_thr": 0.5}},
+            model=settings.asr_model,
+            vad_model=settings.vad_model,
+            vad_kwargs={"max_single_segment_time": settings.max_single_segment_time},
+            punc_model=settings.punc_model,
+            spk_model=settings.spk_model,
+            spk_kwargs={"cb_kwargs": {"merge_thr": settings.merge_thr}},
+            spk_mode="vad_segment",
             device="cpu",
-            hub="ms",
+            hub=settings.hub,
         )
