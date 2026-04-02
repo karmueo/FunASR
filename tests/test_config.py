@@ -20,7 +20,7 @@ def test_default_settings():
     assert s.port == 8000
     assert s.max_audio_duration_s == 7200
     assert s.enable_translation is True
-    assert "nllb-200" in s.translation_model
+    assert "Hunyuan-MT" in s.translation_model
     assert s.translation_max_length == 512
 
 

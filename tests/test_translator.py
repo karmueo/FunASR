@@ -1,19 +1,14 @@
 """Translator 模块测试。"""
 
 import pytest
-from unittest.mock import MagicMock, patch
-from funasr_server.translator import Translator, LANG_MAP
+from unittest.mock import MagicMock, patch, PropertyMock
+from funasr_server.translator import Translator, TRANSLATION_PROMPT
 
 
-def test_lang_map_contains_all_sensevoice_languages():
-    """测试语言映射包含 SenseVoice 支持的所有非中文语言。"""
-    for lang in ("en", "ja", "ko", "yue"):
-        assert lang in LANG_MAP, f"缺少 {lang} 的 NLLB 语言映射"
-
-
-def test_lang_map_excludes_chinese():
-    """测试语言映射不包含中文（中文无需翻译）。"""
-    assert "zh" not in LANG_MAP
+def test_translation_prompt_template():
+    """测试翻译 prompt 模板包含关键指令。"""
+    assert "中文" in TRANSLATION_PROMPT
+    assert "不要额外解释" in TRANSLATION_PROMPT
 
 
 def test_translate_skips_empty_text():
@@ -31,15 +26,35 @@ def test_translate_skips_chinese():
     assert translator.translate("这是中文", "zh") == "这是中文"
 
 
-def test_translate_skips_unknown_language():
-    """测试未知语言不翻译，直接返回原文。"""
+def test_translate_calls_model_for_non_chinese():
+    """测试非中文文本调用模型进行翻译。"""
     with patch("funasr_server.translator.Translator.__init__", return_value=None):
         translator = Translator.__new__(Translator)
-    assert translator.translate("hello", "unknown") == "hello"
+    translator.device = "cpu"
+    translator.max_length = 512
+
+    # mock tokenizer 和 model
+    mock_tokenizer = MagicMock()
+    mock_tokenizer.apply_chat_template.return_value = MagicMock(
+        to=MagicMock(return_value=MagicMock())
+    )
+    mock_tokenizer.decode.return_value = "你好世界"
+    translator.tokenizer = mock_tokenizer
+
+    mock_model = MagicMock()
+    mock_model.generate.return_value = [MagicMock()]
+    mock_model.device = "cpu"
+    translator.model = mock_model
+
+    result = translator.translate("Hello world", "en")
+
+    assert result == "你好世界"
+    mock_tokenizer.apply_chat_template.assert_called_once()
+    mock_model.generate.assert_called_once()
 
 
-def test_batch_translate_groups_by_language():
-    """测试批量翻译按语言分组。"""
+def test_batch_translate_adds_text_zh():
+    """测试批量翻译为非中文片段添加 text_zh 字段。"""
     segments = [
         {"text": "Hello", "language": "en"},
         {"text": "こんにちは", "language": "ja"},

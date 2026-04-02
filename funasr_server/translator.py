@@ -1,37 +1,29 @@
 """多语言到中文翻译模块。
 
-基于 NLLB-200 模型，将非中文转写结果自动翻译为简体中文。
+基于 Hunyuan-MT 模型，将非中文转写结果自动翻译为简体中文。
+使用 chat template 构造翻译 prompt，通过 causal LM 生成翻译结果。
 """
 
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 logger = logging.getLogger(__name__)
 
-# SenseVoice 语言标记 → NLLB-200 FLORES-200 语言代码
-# 中文不在此映射中，因为中文不需要翻译
-LANG_MAP: Dict[str, str] = {
-    "en": "eng_Latn",
-    "ja": "jpn_Jpan",
-    "ko": "kor_Hang",
-    "yue": "yue_Hant",
-}
-
-# NLLB-200 目标语言：简体中文
-TARGET_LANG = "zho_Hans"
+# 翻译 prompt 模板：将任意语言翻译为中文
+TRANSLATION_PROMPT = "把下面的文本翻译成中文，不要额外解释。\n\n"
 
 # 模块级引用，供测试 mock 替换
-_AutoModelForSeq2SeqLM = None
+_AutoModelForCausalLM = None
 _AutoTokenizer = None
 
 
-def _get_seq2seq_model_class():
-    """延迟导入并返回 AutoModelForSeq2SeqLM 类。"""
-    global _AutoModelForSeq2SeqLM
-    if _AutoModelForSeq2SeqLM is None:
-        from transformers import AutoModelForSeq2SeqLM as _Cls
-        _AutoModelForSeq2SeqLM = _Cls
-    return _AutoModelForSeq2SeqLM
+def _get_causal_model_class():
+    """延迟导入并返回 AutoModelForCausalLM 类。"""
+    global _AutoModelForCausalLM
+    if _AutoModelForCausalLM is None:
+        from transformers import AutoModelForCausalLM as _Cls
+        _AutoModelForCausalLM = _Cls
+    return _AutoModelForCausalLM
 
 
 def _get_tokenizer_class():
@@ -44,33 +36,36 @@ def _get_tokenizer_class():
 
 
 class Translator:
-    """多语言到中文翻译器，基于 NLLB-200 模型。
+    """多语言到中文翻译器，基于 Hunyuan-MT 模型。
+
+    使用 causal LM + chat template 方式进行翻译，
+    支持 38 种语言到中文的高质量翻译。
 
     Attributes:
-        model: NLLB-200 序列到序列模型
-        tokenizer: NLLB-200 分词器
+        model: Hunyuan-MT causal LM 模型
+        tokenizer: Hunyuan-MT 分词器
         device: 推理设备
         max_length: 翻译最大 token 长度
     """
 
     def __init__(self, model_name: str, device: str, max_length: int = 512) -> None:
-        """加载 NLLB-200 模型和分词器。
+        """加载 Hunyuan-MT 模型和分词器。
 
         Args:
-            model_name: HuggingFace 模型名称
+            model_name: HuggingFace 模型名称（如 tencent/Hunyuan-MT-7B-fp8）
             device: 推理设备（cuda/cpu）
-            max_length: 翻译最大 token 长度
+            max_length: 翻译最大生成 token 长度
         """
         self.device = device
         self.max_length = max_length
 
         logger.info("正在加载翻译模型: %s, device=%s", model_name, device)
 
-        ModelClass = _get_seq2seq_model_class()
+        ModelClass = _get_causal_model_class()
         TokenizerClass = _get_tokenizer_class()
 
         self.tokenizer = TokenizerClass.from_pretrained(model_name)
-        self.model = ModelClass.from_pretrained(model_name).to(device)
+        self.model = ModelClass.from_pretrained(model_name, device_map=device)
 
         logger.info("翻译模型加载完成")
 
@@ -82,7 +77,7 @@ class Translator:
             source_lang: SenseVoice 语言标记（en/ja/ko/yue/zh）
 
         Returns:
-            翻译后的中文文本；中文或未知语言返回原文
+            翻译后的中文文本；中文或空文本/未知语言返回原文
         """
         # 空文本直接返回
         if not text or not text.strip():
@@ -92,27 +87,33 @@ class Translator:
         if source_lang == "zh":
             return text
 
-        # 查找 NLLB 语言代码
-        nllb_lang = LANG_MAP.get(source_lang)
-        if nllb_lang is None:
-            return text
+        # 构造 chat template 消息
+        messages = [
+            {"role": "user", "content": TRANSLATION_PROMPT + text},
+        ]
 
-        # 设置源语言并执行翻译
-        self.tokenizer.src_lang = nllb_lang
-        inputs = self.tokenizer(text, return_tensors="pt", truncation=True,
-                                max_length=self.max_length).to(self.device)
+        input_ids = self.tokenizer.apply_chat_template(
+            messages,
+            tokenize=True,
+            add_generation_prompt=False,
+            return_tensors="pt",
+        ).to(self.device)
 
+        # 推荐推理参数
         gen_tokens = self.model.generate(
-            **inputs,
-            forced_bos_token_id=self.tokenizer.convert_tokens_to_ids(TARGET_LANG),
-            max_length=self.max_length,
+            input_ids,
+            max_new_tokens=self.max_length,
+            top_k=20,
+            top_p=0.6,
+            temperature=0.7,
+            repetition_penalty=1.05,
         )
 
-        result = self.tokenizer.batch_decode(gen_tokens, skip_special_tokens=True)[0]
+        result = self.tokenizer.decode(gen_tokens[0], skip_special_tokens=True)
         return result
 
     def batch_translate(self, segments: List[Dict]) -> List[Dict]:
-        """批量翻译转写片段，按语言分组批量推理。
+        """批量翻译转写片段。
 
         为每个非中文片段添加 text_zh 字段。翻译失败时 text_zh 为 None。
 

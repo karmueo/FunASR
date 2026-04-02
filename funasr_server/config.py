@@ -40,7 +40,7 @@ class Settings:
 
     # 翻译配置
     enable_translation: bool = True
-    translation_model: str = "facebook/nllb-200-distilled-600M"
+    translation_model: str = "tencent/Hunyuan-MT-7B-fp8"
     translation_max_length: int = 512
 
     # 服务配置
