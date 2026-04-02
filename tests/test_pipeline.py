@@ -2,7 +2,7 @@
 
 import pytest
 from unittest.mock import MagicMock, patch
-from funasr_server.pipeline import TranscriptionPipeline
+from funasr_server.pipeline import TranscriptionPipeline, _detect_language
 
 
 def test_validate_audio_format_wav():
@@ -54,6 +54,7 @@ def test_format_result_structure():
 
     with patch("funasr_server.pipeline.TranscriptionPipeline.__init__", return_value=None):
         pipeline = TranscriptionPipeline.__new__(TranscriptionPipeline)
+    pipeline.translator = None
 
     result = pipeline.format_result("test-task-id", raw_result, duration_s=10.5)
 
@@ -67,6 +68,8 @@ def test_format_result_structure():
     assert result["segments"][1]["speaker"] == "spk1"
     assert "spk0" in result["speakers"]
     assert "spk1" in result["speakers"]
+    # 无翻译器时 text_zh 为 None
+    assert result["segments"][0].get("text_zh") is None
 
 
 def test_format_result_empty_segments():
@@ -79,6 +82,7 @@ def test_format_result_empty_segments():
 
     with patch("funasr_server.pipeline.TranscriptionPipeline.__init__", return_value=None):
         pipeline = TranscriptionPipeline.__new__(TranscriptionPipeline)
+    pipeline.translator = None
 
     result = pipeline.format_result("empty-task", raw_result, duration_s=5.0)
 
@@ -107,3 +111,50 @@ def test_pipeline_init_calls_auto_model():
             device="cpu",
             hub=settings.hub,
         )
+
+
+def test_detect_language_from_sensevoice_tokens():
+    """测试从 SenseVoice 语言标记检测语言。"""
+    assert _detect_language({"text": "<|en|>Hello world"}) == "en"
+    assert _detect_language({"text": "<|ja|>こんにちは"}) == "ja"
+    assert _detect_language({"text": "<|ko|>안녕하세요"}) == "ko"
+    assert _detect_language({"text": "<|yue|>你好嗎"}) == "yue"
+    assert _detect_language({"text": "<|zh|>你好"}) == "zh"
+
+
+def test_detect_language_fallback_chinese_ratio():
+    """测试无语言标记时的中文比例启发式。"""
+    assert _detect_language({"text": "今天天气很好"}) == "zh"
+    assert _detect_language({"text": "The weather is nice"}) == "en"
+
+
+def test_format_result_with_translation():
+    """测试格式化结果时集成翻译。"""
+    raw_result = {
+        "key": "test_audio",
+        "text": "<|en|>Hello world.",
+        "sentence_info": [
+            {
+                "start": 0,
+                "end": 2000,
+                "sentence": "Hello world.",
+                "speaker": "spk0",
+            },
+        ],
+    }
+
+    mock_translator = MagicMock()
+    mock_translator.batch_translate.side_effect = lambda segs: [
+        {**s, "text_zh": "[zh]" + s["text"]} if s.get("language") != "zh" else {**s, "text_zh": None}
+        for s in segs
+    ]
+
+    with patch("funasr_server.pipeline.TranscriptionPipeline.__init__", return_value=None):
+        pipeline = TranscriptionPipeline.__new__(TranscriptionPipeline)
+    pipeline.translator = mock_translator
+
+    result = pipeline.format_result("task-1", raw_result, duration_s=5.0)
+
+    assert result["language"] == "en"
+    assert result["segments"][0]["text_zh"] == "[zh]Hello world."
+    mock_translator.batch_translate.assert_called_once()

@@ -79,9 +79,23 @@ class TranscriptionPipeline:
             punc_model=settings.punc_model,
             spk_model=settings.spk_model,
             spk_kwargs={"cb_kwargs": {"merge_thr": settings.merge_thr}},
+            spk_mode="vad_segment",  # 使用 VAD 段边界做说话人分配，不依赖 ASR 时间戳
             device=settings.device,
             hub=settings.hub,
         )
+
+        # 初始化翻译器（翻译功能启用时）
+        self.translator = None
+        if settings.enable_translation:
+            try:
+                from funasr_server.translator import Translator
+                self.translator = Translator(
+                    model_name=settings.translation_model,
+                    device=settings.device,
+                    max_length=settings.translation_max_length,
+                )
+            except Exception as e:
+                logger.warning("翻译模型加载失败，翻译功能不可用: %s", e)
 
         logger.info("模型加载完成")
 
@@ -165,6 +179,7 @@ class TranscriptionPipeline:
         Returns:
             格式化后的响应字典
         """
+        detected_lang = _detect_language(raw_result)
         segments: List[Dict] = []
         speakers_set = set()
 
@@ -178,11 +193,16 @@ class TranscriptionPipeline:
                     "start_ms": sent.get("start", 0),
                     "end_ms": sent.get("end", 0),
                     "text": sent.get("sentence", ""),
+                    "language": detected_lang,
                 })
+
+        # 翻译非中文片段
+        if self.translator and segments:
+            segments = self.translator.batch_translate(segments)
 
         return {
             "task_id": task_id,
-            "language": _detect_language(raw_result),
+            "language": detected_lang,
             "duration_s": duration_s,
             "segments": segments,
             "speakers": sorted(speakers_set),
@@ -192,19 +212,20 @@ class TranscriptionPipeline:
 def _detect_language(raw_result: Dict) -> str:
     """从转写结果中推断语言标识。
 
+    优先从 SenseVoice 语言标记检测，回退到中文字符比例启发式。
+
     Args:
         raw_result: AutoModel 原始输出
 
     Returns:
-        语言代码，zh 或 en
+        语言代码（zh/en/ja/ko/yue）
     """
     text = raw_result.get("text", "")
-    # SenseVoice 输出可能包含语言标记
-    if "<|en|>" in text:
-        return "en"
-    if "<|zh|>" in text:
-        return "zh"
-    # 简单启发式：统计中文字符比例
+    # SenseVoice 语言标记检测
+    for lang_tag in ("zh", "en", "ja", "ko", "yue"):
+        if f"<|{lang_tag}|>" in text:
+            return lang_tag
+    # 回退：中文字符比例启发式
     chinese_count = sum(1 for c in text if "\u4e00" <= c <= "\u9fff")
     total = max(len(text.replace(" ", "")), 1)
     return "zh" if chinese_count / total > 0.3 else "en"
