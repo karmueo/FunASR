@@ -65,7 +65,7 @@ class Translator:
         TokenizerClass = _get_tokenizer_class()
 
         self.tokenizer = TokenizerClass.from_pretrained(model_name)
-        self.model = ModelClass.from_pretrained(model_name, device_map=device)
+        self.model = ModelClass.from_pretrained(model_name, torch_dtype="auto").to(device)
 
         logger.info("翻译模型加载完成")
 
@@ -109,7 +109,9 @@ class Translator:
             repetition_penalty=1.05,
         )
 
-        result = self.tokenizer.decode(gen_tokens[0], skip_special_tokens=True)
+        # 仅解码新增输出，避免把输入 prompt 和原文一并返回。
+        generated_tokens = gen_tokens[0][input_ids.shape[-1]:]
+        result = self.tokenizer.decode(generated_tokens, skip_special_tokens=True)
         return result
 
     def batch_translate(self, segments: List[Dict]) -> List[Dict]:

@@ -53,6 +53,32 @@ def test_translate_calls_model_for_non_chinese():
     mock_model.generate.assert_called_once()
 
 
+def test_translate_decodes_only_new_tokens():
+    """测试翻译结果只解码新增 token，不包含输入 prompt。"""
+    with patch("funasr_server.translator.Translator.__init__", return_value=None):
+        translator = Translator.__new__(Translator)
+    translator.device = "cpu"
+    translator.max_length = 64
+
+    mock_input_ids = MagicMock()
+    mock_input_ids.shape = (1, 5)
+    mock_input_ids.to.return_value = mock_input_ids
+
+    mock_tokenizer = MagicMock()
+    mock_tokenizer.apply_chat_template.return_value = mock_input_ids
+    mock_tokenizer.decode.return_value = "你好，世界。"
+    translator.tokenizer = mock_tokenizer
+
+    mock_model = MagicMock()
+    mock_model.generate.return_value = [[101, 102, 103, 104, 105, 201, 202]]
+    translator.model = mock_model
+
+    result = translator.translate("Hello world", "en")
+
+    assert result == "你好，世界。"
+    mock_tokenizer.decode.assert_called_once_with([201, 202], skip_special_tokens=True)
+
+
 def test_batch_translate_adds_text_zh():
     """测试批量翻译为非中文片段添加 text_zh 字段。"""
     segments = [
